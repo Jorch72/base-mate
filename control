@@ -1,0 +1,243 @@
+local config
+local points = {}
+local pointTypes = {}
+os.loadAPI("priority")
+
+local function loadConfig()
+	if fs.exists("control.config") then
+		local env = setmetatable({}, {__index = _G})
+		local fn, err = loadfile("control.config")
+		if fn then
+			setfenv(fn, env)
+			local success, err = pcall(fn)
+			if success then
+				config = env
+			else
+				return false, err
+			end
+		else
+			return false, err
+		end
+	else
+		return false, "no config file found"
+	end
+	return true
+end
+
+local function loadPoints()
+	if fs.exists("points") and fs.isDir("points") then
+		for _, name in pairs(fs.list("points")) do
+			local file = fs.combine("points", name)
+			local env = setmetatable({}, {__index = _G})
+			local fn, err = loadfile(file)
+			if fn then
+				setfenv(fn, env)
+				local success, err = pcall(fn)
+				if success then
+					pointTypes[name] = env
+				else
+					return false, err
+				end
+			else
+				return false, err
+			end
+		end
+	else
+		return false, "no points folder"
+	end
+	return true
+end
+
+local function setupPoints()
+	for i, pInfo in ipairs(config.points) do
+		if pointTypes[pInfo.type] then
+			--point type exists, create.
+			points[i] = pointTypes[pInfo.type].new(pInfo)
+		end
+	end
+end
+
+local function loadState()
+	if fs.exists("control.state") then
+		local handle = io.open("control.state", "r")
+		if handle then
+			local savedState = textutils.unserialize(handle:read("*a"))
+			handle:close()
+			for i = 1, #savedState do
+				points[i]:restoreState(savedState[i])
+			end
+		else
+			return false, "could not open saved state file"
+		end
+	else
+		return false, "no saved state"
+	end
+	return true
+end
+
+local function saveState()
+	local state = {}
+	for i = 1, #points do
+		state[i] = points[i]:saveState()
+	end
+	local handle = io.open("control.state", "w")
+	if handle then
+		handle:write(textutils.serialize(state))
+		handle:close()
+	else
+		return false, "could not open state file to write"
+	end
+end
+
+do
+	local success, err
+	success, err = loadConfig()
+	if not success then error(err) end
+	success, err = loadPoints()
+	if not success then error(err) end
+	setupPoints()
+	loadState()
+end
+
+--to be called in parallel, ticks all points.
+local function tickPoints()
+	local time = os.startTimer(0.1)
+	while true do
+		local event = {os.pullEvent()}
+		if event[1] == "timer" and event[2] == time then
+			local changed, changes = false, {}
+			for i = 1, #points do
+				points[i]:tick()
+				changed = changed or points[i].changed
+				table.insert(changes, i)
+				points[i].changed = false
+			end
+			if changed then
+				os.queueEvent("cov", changes)
+				saveState()
+			end
+			time = os.startTimer(0.1)
+		end
+	end
+end
+
+local pointsEnv = {[config.name] = {}}
+for i = 1, #points do
+	pointsEnv[config.name][points[i].name] = {}
+	local pmeta = {
+		__index = function(t, k)
+			if k == "value" then
+				return points[i].value
+			else
+				return nil
+			end
+		end,
+		__newindex = function(t, k, v)
+			if k == "value" then
+				points[i].setValue(v)
+			end
+		end,
+	}
+	setmetatable(pointsEnv[config.name][points[i].name], pmeta)
+end
+
+local function runPrograms()
+	local env = {points = pointsEnv}
+	setmetatable(env, {__index = _G})
+	local programs = {}
+	if fs.exists("programs") and fs.isDir("programs") then
+		for _, name in pairs(fs.list("programs")) do
+			local file = fs.combine("programs", name)
+			local fn, err = loadfile(file)
+			if fn then
+				setfenv(fn, env)
+				table.insert(programs, fn)
+			end
+		end
+	else
+		while true do
+			os.pullEvent("terminate")
+		end
+	end
+	parallel.waitForAll(unpack(programs))
+end
+
+local function send(id, message)
+	if term.current then
+		rednet.send(id, message, "base-mate")
+	else
+		rednet.send(id, message)
+	end
+end
+
+local function doCommunication()
+	if config.master then
+		send(config.master, "connect_panel")
+		local timeout = os.startTimer(5)
+		local id, message
+		while true do
+			local event = {os.pullEvent()}
+			if event[1] == "rednet_message" and event[2] == config.master then
+				id, message = event[2], event[3]
+				break
+			elseif event[1] == "timer" and event[2] == timeout then
+				break
+			end
+		end
+		if id and message and message == "ok" then
+			while true do
+				local event = {os.pullEvent()}
+				if event[1] == "rednet_message" and event[2] == config.master and type(event[3]) == "table" then
+					if event[3].type == "q_point_list" then
+						local pointList = {type = "point_list", points = {}}
+						for i = 1, #points do
+							local point = {
+								name = config.name.."."..points[i].name,
+								value = points[i].value,
+								priority = points[i].priority,
+							}
+							table.insert(pointList.points, point)
+						end
+						send(config.master, pointList)
+					elseif event[3].type == "q_value" then
+						for i = 1, #points do
+							if config.name.."."..points[i].name == event[3].point then
+								send(config.master, points[i].value)
+								break
+							end
+						end
+					elseif event[3].type == "command" then
+						for i = 1, #points do
+							if config.name.."."..points[i].name == event[3].point then
+								points[i]:onCommand(event[3].command)
+								break
+							end
+						end
+					elseif event[3].type == "heartbeat" then
+						send(config.master, {type = "ack"})
+					end
+				elseif event[1] == "cov" then
+					for i = 1, #event[2] do
+						local change = {
+							type = "cov",
+							point = config.name.."."..points[event[2][i]].name,
+							value = points[event[2][i]].value,
+							priority = points[event[2][i]].priority,
+						}
+						send(config.master, change)
+					end
+				end
+			end
+		else
+			while true do
+				os.pullEvent("terminate")
+			end
+		end
+	else
+		while true do
+			os.pullEvent("terminate")
+		end
+	end
+end
+
+parallel.waitForAny(tickPoints, runPrograms, doCommunication)

@@ -1,0 +1,70 @@
+local sideLookup = {
+	suck = {
+		front = turtle.suck,
+		top = turtle.suckUp,
+		bottom = turtle.suckDown,
+	},
+	drop = {
+		front = turtle.drop,
+		top = turtle.dropUp,
+		bottom = turtle.dropDown,
+	},
+}
+
+local Point = {
+	tick = function(self)
+		if self.value ~= self.state then
+			if self.state ~= 0 then
+				turtle.select(self.state)
+				sideLookup.suck[self.side]()
+			end
+			if self.value ~= 0 then
+				turtle.select(self.value)
+				sideLookup.drop[self.side]()
+			end
+			self:onChange()
+		end
+	end,
+	onChange = function(self)
+		self.changed = true
+		self.state = self.value
+		--send update upward
+	end,
+	onCommand = function(self, command)
+		self.value = command.value
+		self.priority = command.priority
+		return true
+	end,
+	setValue = function(self, value)
+		if self.priority == priority.NORM then
+			self.value = value
+		end
+	end,
+	restoreState = function(self, state)
+		self.value = state
+	end,
+	saveState = function(self, state)
+		return self.state
+	end,
+}
+
+local pmeta = {__index = Point}
+
+function new(info)
+	local point = {}
+	point.name = info.name
+	point.side = info.side
+	point.slots = info.slots
+	point.state = 0
+	for _, slot in ipairs(point.slots) do
+		if turtle.getItemCount(slot) == 0 then
+			point.state = slot
+			break
+		end
+	end
+	point.priority = priority.NORM
+	point.value = point.state
+	point.changed = false
+	setmetatable(point, pmeta)
+	return point
+end

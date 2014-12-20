@@ -1,0 +1,33 @@
+local points = {}
+local panels = {}
+
+local function send(id, message)
+	if term.current then
+		rednet.send(id, message, "base-mate")
+	else
+		rednet.send(id, message)
+	end
+end
+
+while true do
+	local event = {os.pullEvent()}
+	if event[1] == "rednet_message" then
+		if type(event[3]) == "string" then
+			if event[3] == "connect_panel" then
+				panels[event[2]] = {status = "open"}
+				send(event[2], "ok")
+				send(event[2], {type = "q_point_list"})
+			end
+		elseif type(event[3]) == "table" then
+			if event[3].type == "point_list" then
+				for i = 1, #event[3].points do
+					points[event[3].points[i].name] = {value = event[3].points[i].value, priority = event[3].points[i].priority, panel = event[2]}
+				end
+			elseif event[3].type == "command" then
+				if points[event[3].point] then
+					send(points[event[3].point].panel, event[3])
+				end
+			end
+		end
+	end
+end

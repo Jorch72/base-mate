@@ -1,0 +1,45 @@
+local Point = {
+	tick = function(self)
+		if rs.getInput(self.side) ~= self.state and self.priority == priority.NORM then
+			self.state = rs.getInput(self.side)
+			self:onChange()
+		end
+	end,
+	onChange = function(self)
+		self.changed = true
+		self.value = self.state
+		--send update upward
+	end,
+	onCommand = function(self, command)
+		if command.priority == priority.OPER then
+			self.state = command.value
+			self.priority = command.priority
+			self:onChange()
+			return true
+		else
+			return false
+		end
+	end,
+	setValue = function()
+	end,
+	restoreState = function(self, state)
+		self.state = state
+	end,
+	saveState = function(self, state)
+		return self.value
+	end,
+}
+
+local pmeta = {__index = Point}
+
+function new(info)
+	local point = {}
+	point.name = info.name
+	point.side = info.side
+	point.state = rs.getInput(info.side)
+	point.priority = priority.NORM
+	point.value = point.state
+	point.changed = false
+	setmetatable(point, pmeta)
+	return point
+end

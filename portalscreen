@@ -1,0 +1,186 @@
+os.loadAPI("touchpoint")
+
+local portals = {}
+local points = {}
+
+local function loadPortalCatalog()
+	if fs.exists("portalcatalog") then
+		local handle = io.open("portalcatalog", "r")
+		if handle then
+			for line in handle:lines() do
+				local point, value, description = string.match(line, "%s*(%S+)%s+(%S+)%s+(.*)")
+				if point and value and description then
+					local portal = {
+						point = point,
+						value = tonumber(value),
+						description = description
+					}
+					table.insert(portals, portal)
+					--set up easy-use reset-all-points system.
+					if not points[point] then points[point] = true end
+				end
+			end
+			handle:close()
+		else
+			return false, "could not open portal catalog"
+		end
+	else
+		return false, "portal catalog does not exist"
+	end
+	return true
+end
+
+local function commandPoint(point, value)
+	local com = {
+		type = "command",
+		point = point,
+		command = {
+			priority = 0,
+			value = value,
+		}
+	}
+	rednet.send(40, com)
+end
+
+local success, err = loadPortalCatalog()
+if not success then error(err) end
+
+local monitor
+for _, side in ipairs(rs.getSides()) do
+	if peripheral.getType(side) == "monitor" then
+		monitor = side
+		break
+	end
+end
+
+if not monitor then
+	error("No monitor found!", 0)
+end
+
+local mon = peripheral.wrap(monitor)
+mon.setTextScale(0.5)
+local x, y = mon.getSize()
+if y < 15 or x < 15 then
+	error("Monitor too small!", 0)
+end
+
+local columns = math.floor(x - 1 / 14)
+local rows = math.floor(y - 11 / 4)
+local pages = {}
+local currentPage = 1
+local addedPortals = 0
+local openPortalTimer, closePortalTimer
+local openPortal, openPortalPage
+
+local function previousPage()
+	if currentPage > 1 then
+		currentPage = currentPage - 1
+	end
+end
+
+local function nextPage()
+	if currentPage < #pages then
+		currentPage = currentPage + 1
+	end
+end
+
+local function loadPortal(num)
+	if openPortal or openPortalPage then return end
+	for k, v in pairs(points) do
+		commandPoint(k, 0)
+	end
+	openPortalPage, openPortal = currentPage, num
+	pages[currentPage]:toggleButton(portals[num].description)
+	commandPoint("travel-portal.drawbridges", false)
+	openPortalTimer = os.startTimer(0.5)
+end
+
+local function newPage()
+	local t = touchpoint.new(monitor)
+	t.draw = function(self)
+		local _old = term.redirect(self.mon)
+		local x, y = term.getSize()
+		term.setTextColor(colors.white)
+		term.setBackgroundColor(colors.gray)
+		term.clear()
+		for name, buttonData in pairs(self.buttonList) do
+			if buttonData.active then
+				term.setBackgroundColor(buttonData.activeColor)
+				term.setTextColor(buttonData.activeText)
+			else
+				term.setBackgroundColor(buttonData.inactiveColor)
+				term.setTextColor(buttonData.inactiveText)
+			end
+			for i = buttonData.yMin, buttonData.yMax do
+				term.setCursorPos(buttonData.xMin, i)
+				term.write(buttonData.label[i - buttonData.yMin + 1])
+			end
+		end
+		do
+			--title
+			term.setBackgroundColor(colors.gray)
+			term.setTextColor(colors.white)
+			local label = "Portal Control"
+			term.setCursorPos((x - #label) / 2 + 1, 2)
+			term.write(label)
+			--header line
+			term.setCursorPos(1, 4)
+			term.setBackgroundColor(colors.lightGray)
+			term.write(string.rep(" ", x))
+			--footer line
+			term.setCursorPos(1, y - 5)
+			term.setBackgroundColor(colors.lightGray)
+			term.write(string.rep(" ", x))
+			if x > 21 and #pages > 1 then
+				--draw page numbers
+				local label = tostring(currentPage).."/"..tostring(#pages)
+				term.setBackgroundColor(colors.gray)
+				term.setCursorPos((x - #label) / 2 + 1, y - 2)
+				term.write(label)
+			end
+		end
+		if _old then
+			term.redirect(_old)
+		else
+			term.restore()
+		end
+	end
+
+	if #pages > 0 then
+		t:add("Prev", previousPage, 2, y - 3, 7, y - 1, colors.yellow, colors.lime, colors.black, colors.white)
+		pages[#pages - 1]:add("Next", nextPage, x - 6, y - 3, x - 1, y - 1, colors.yellow, colors.lime, colors.black, colors.white)
+	end
+
+	for i = 1, columns do
+		for j = 1, rows do
+			addedPortals = addedPortals + 1
+			local thisPortal = addedPortals
+			t:add(portals[thisPortal].description, function() loadPortal(thisPortal) end, (i - 1) * 14 + 2, (j - 1) * 4 + 6, (i - 1) * 14 + 14, (j - 1) * 4 + 8)
+			if addedPortals == #portals then break end
+		end
+		if addedPortals == #portals then break end
+	end
+	table.insert(pages, t)
+end
+
+while addedPortals < #portals do
+	newPage()
+end
+
+while true do
+	pages[currentPage]:draw()
+	local event = {pages[currentPage]:handleEvents(os.pullEvent())}
+	if event[1] == "button_click" then
+		pages[currentPage].buttonList[event[2]].func()
+	elseif event[1] == "timer" then
+		if event[2] == openPortalTimer then
+			commandPoint(portals[openPortal].point, portals[openPortal].value)
+			closePortalTimer = os.startTimer(10)
+		elseif event[2] == closePortalTimer then
+			commandPoint("travel-portal.drawbridges", true)
+			commandPoint(portals[openPortal].point, 0)
+			pages[openPortalPage]:toggleButton(portals[openPortal].description)
+			openPortalPage, openPortal = nil, nil
+		end
+	end
+end

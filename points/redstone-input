@@ -25,7 +25,7 @@ local Point = {
 	restoreState = function(self, state)
 		self.state = state
 	end,
-	saveState = function(self, state)
+	saveState = function(self)
 		return self.value
 	end,
 }

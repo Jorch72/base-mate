@@ -1,2 +1,4 @@
 NORM = 0
-OPER = 1
+OVRD = 1
+EMER = 2
+OPER = 3

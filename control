@@ -162,6 +162,14 @@ local function runPrograms()
 	parallel.waitForAll(unpack(programs))
 end
 
+if config.master then
+	for _, side in ipairs(rs.getSides()) do
+		if peripheral.getType(side) == "modem" then
+			rednet.open(side)
+		end
+	end
+end
+
 local function send(id, message)
 	if term.current then
 		rednet.send(id, message, "base-mate")

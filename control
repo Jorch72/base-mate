@@ -88,7 +88,7 @@ end
 
 --to be called in parallel, ticks all points.
 local function tickPoints()
-	local time = os.startTimer(0.1)
+	local time = os.startTimer(0.2)
 	while true do
 		local event = {os.pullEvent()}
 		if event[1] == "timer" and event[2] == time then
@@ -103,7 +103,7 @@ local function tickPoints()
 				os.queueEvent("cov", changes)
 				saveState()
 			end
-			time = os.startTimer(0.1)
+			time = os.startTimer(0.2)
 		end
 	end
 end

@@ -25,8 +25,21 @@ end
 local function setupPoints()
 	for i, pInfo in ipairs(config.points) do
 		if pointTypes[pInfo.type] then
-			--point type exists, create.
-			points[i] = pointTypes[pInfo.type].new(pInfo)
+			--point type exists, see if point has subpoints
+			if pInfo.subpoints then
+				for j, subInfo in ipairs(pInfo.points) do
+					if pointTypes[pInfo.type][subInfo.type] then
+						setfenv(pointTypes[pInfo.type][subInfo.type], setmetatable(getfenv(pointTypes[pInfo.type][subInfo.type]), {__index = _G}))
+						points[#points + 1] = pointTypes[pInfo.type][subInfo.type](pInfo, subInfo)
+						--subpoint key tells the pointsEnv portion of things that this should be a subpoint.
+						points[#points].subpoint = pInfo.name
+					end
+				end
+			else
+				--create single point.
+				setfenv(pointTypes[pInfo.type].new, setmetatable(getfenv(pointTypes[pInfo.type].new), {__index = _G}))
+				points[#points + 1] = pointTypes[pInfo.type].new(pInfo)
+			end
 		end
 	end
 end
@@ -95,24 +108,42 @@ local function tickPoints()
 	end
 end
 
-local pointsEnv = {[config.name] = {}}
-for i = 1, #points do
-	pointsEnv[config.name][points[i].name] = {}
+local function makeMeta(point)
 	local pmeta = {
 		__index = function(t, k)
 			if k == "value" then
-				return points[i].value
+				return point.value
 			else
 				return nil
 			end
 		end,
 		__newindex = function(t, k, v)
 			if k == "value" then
-				points[i].setValue(v)
+				point:setValue(v)
 			end
 		end,
 	}
-	setmetatable(pointsEnv[config.name][points[i].name], pmeta)
+	return pmeta
+end
+
+local pointsEnv = {[config.name] = {}}
+for i = 1, #points do
+	if points[i].subpoint then
+		--do subpoint stuff
+		if not pointsEnv[config.name][points[i].subpoint] then
+			pointsEnv[config.name][points[i].subpoint] = {}
+			local submeta = {
+				__newindex = function(t, k, v) end,
+			},
+			setmetatable(pointsEnv[config.name][points[i].subpoint], submeta)
+		end
+		local pTable = {}
+		setmetatable(pTable, makeMeta(points[i]))
+		rawset(pointsEnv[config.name][points[i].subpoint], points[i].name, pTable)
+	else
+		pointsEnv[config.name][points[i].name] = {}
+		setmetatable(pointsEnv[config.name][points[i].name], makeMeta(points[i]))
+	end
 end
 
 local function runPrograms()

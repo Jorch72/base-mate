@@ -1,43 +1,17 @@
 local config
 local points = {}
 local pointTypes = {}
-os.loadAPI("priority")
+if not os.loadAPI("priority") then error("Could not load priority API") end
+if not os.loadAPI("configuration") then error("Could not load configuration API") end
 
-local function loadConfig()
-	if fs.exists("control.config") then
-		local env = setmetatable({}, {__index = _G})
-		local fn, err = loadfile("control.config")
-		if fn then
-			setfenv(fn, env)
-			local success, err = pcall(fn)
-			if success then
-				config = env
-			else
-				return false, err
-			end
-		else
-			return false, err
-		end
-	else
-		return false, "no config file found"
-	end
-	return true
-end
+--loadConfig function replaced with simple configuration.load("control.config") call later on in file.
 
 local function loadPoints()
 	if fs.exists("points") and fs.isDir("points") then
 		for _, name in pairs(fs.list("points")) do
-			local file = fs.combine("points", name)
-			local env = setmetatable({}, {__index = _G})
-			local fn, err = loadfile(file)
-			if fn then
-				setfenv(fn, env)
-				local success, err = pcall(fn)
-				if success then
-					pointTypes[name] = env
-				else
-					return false, err
-				end
+			local env, err = configuration.load((fs.combine("points", name)))
+			if env then
+				pointTypes[name] = env
 			else
 				return false, err
 			end
@@ -91,8 +65,8 @@ end
 
 do
 	local success, err
-	success, err = loadConfig()
-	if not success then error(err) end
+	config, err = configuration.load("control.config")
+	if not config then error(err) end
 	success, err = loadPoints()
 	if not success then error(err) end
 	setupPoints()

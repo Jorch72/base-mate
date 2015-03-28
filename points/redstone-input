@@ -1,18 +1,20 @@
 local Point = {
 	tick = function(self)
-		if rs.getInput(self.side) ~= self.state and self.priority == priority.NORM then
+		if rs.getInput(self.side) ~= self.state then
 			self.state = rs.getInput(self.side)
 			self:onChange()
 		end
 	end,
 	onChange = function(self)
-		self.changed = true
-		self.value = self.state
-		--send update upward
+		if self.priority == priority.NORM and self.value ~= self.state then
+			self.changed = true
+			self.value = self.state
+			--send update upward
+		end
 	end,
 	onCommand = function(self, command)
-		if command.priority == priority.OPER then
-			self.state = command.value
+		if command.priority >= self.priority then
+			self.value = command.value
 			self.priority = command.priority
 			self:onChange()
 			return true
@@ -20,13 +22,15 @@ local Point = {
 			return false
 		end
 	end,
-	setValue = function()
+	setValue = function(self, value)
+		self.value = value
 	end,
 	restoreState = function(self, state)
-		self.state = state
+		self.value = state[1]
+		self.priority = state[2]
 	end,
 	saveState = function(self)
-		return self.value
+		return {self.value, self.priority}
 	end,
 }
 

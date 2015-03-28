@@ -11,20 +11,23 @@ local Point = {
 		--send update upward
 	end,
 	onCommand = function(self, command)
-		self.value = command.value
-		self.priority = command.priority
-		return true
-	end,
-	setValue = function(self, value)
-		if self.priority == priority.NORM then
-			self.value = value
+		if command.priority >= self.priority then
+			self.value = command.value
+			self.priority = command.priority
+			return true
+		else
+			return false
 		end
 	end,
+	setValue = function(self, value)
+		self.value = value
+	end,
 	restoreState = function(self, state)
-		self.value = state
+		self.value = state[1]
+		self.priority = state[2]
 	end,
 	saveState = function(self)
-		return self.state
+		return {self.value, self.priority}
 	end,
 }
 

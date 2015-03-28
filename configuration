@@ -24,12 +24,17 @@ function load(path, _env)
 end
 
 function save(path, config)
-	if not config or type(config) ~= "table" then return nil, "not a configuration" end
+	if not config or type(config) ~= "table" then return nil, "Not a configuration" end
 	local handle = io.open(path, "w")
 	if handle then
-		handle:write(textutils.serialize(config))
+		for k, v in pairs(config) do
+			local success, str = pcall(textutils.serialize(v))
+			if success then
+				handle:write(k.." = "..str.."\n\n")
+			end
+		end
 		handle:close()
 	else
-		return nil, "could not write configuration"
+		return nil, "Could not write configuration."
 	end
 end

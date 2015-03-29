@@ -1,0 +1,69 @@
+local Point = {
+	tick = function(self)
+		local details = peripheral.call(self.side, "getTargetDetails", self.target)
+		if details then
+			self.state = details[self.key]
+			self:onChange()
+		end
+	end,
+	onChange = function(self)
+		if self.priority == priority.NORM and self.value ~= self.state then
+			self.changed = true
+			self.value = self.state
+			--send update upward
+		end
+	end,
+	onCommand = function(self, command)
+		if command.priority >= self.priority then
+			self.state = command.value
+			self.priority = command.priority
+			self:onChange()
+			return true
+		else
+			return false
+		end
+	end,
+	setValue = function(self, value)
+		self.value = value
+	end,
+	restoreState = function(self, state)
+		self.value = state[1]
+		self.priority = state[2]
+	end,
+	saveState = function(self)
+		return {self.value, self.priority}
+	end,
+}
+
+local pmeta = {__index = Point}
+
+function new(sensorInfo, pointInfo)
+	local point = {}
+	point.name = pointInfo.name
+	point.side = sensorInfo.side
+	point.target = sensorInfo.target
+	--point.state = rs.getInput(info.side)
+	point.priority = priority.NORM
+	point.value = point.state
+	point.changed = false
+	setmetatable(point, pmeta)
+	return point
+end
+
+function capacity(sensorInfo, pointInfo)
+	local point = new(sensorInfo, pointInfo)
+	point.key = "Capacity"
+	return point
+end
+
+function amount(sensorInfo, pointInfo)
+	local point = new(sensorInfo, pointInfo)
+	point.key = "Stored"
+	return point
+end
+
+function output(sensorInfo, pointInfo)
+	local point = new(sensorInfo, pointInfo)
+	point.key = "Output"
+	return point
+end

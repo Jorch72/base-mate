@@ -1,23 +1,22 @@
 local Point = {
 	tick = function(self)
-		local details = peripheral.call(self.side, "getTargetDetails", self.target)
-		if details then
-			self.state = details[self.key]
-			self:onChange()
+		local startValue = self.value
+		if self.state ~= self.value then
+			self.output()
 		end
-	end,
-	onChange = function(self)
-		if self.priority == priority.NORM and self.value ~= self.state then
-			self.changed = true
+		local input = self.input()
+		if input then self.state = input end
+		if self.state ~= self.value and self.priority == priority.NORM then
 			self.value = self.state
-			--send update upward
+		end
+		if self.value ~= startValue then
+			self.changed = true
 		end
 	end,
 	onCommand = function(self, command)
 		if command.priority >= self.priority then
-			self.state = command.value
+			self.value = command.value
 			self.priority = command.priority
-			self:onChange()
 			return true
 		else
 			return false
@@ -37,33 +36,43 @@ local Point = {
 
 local pmeta = {__index = Point}
 
-function new(sensorInfo, pointInfo)
+local subpoints = {
+	capacity = "Capacity",
+	amount = "Stored",
+	output = "Output",
+	input = "EnergyIn",
+}
+
+function new(info)
 	local point = {}
-	point.name = pointInfo.name
-	point.side = sensorInfo.side
-	point.target = sensorInfo.target
-	--point.state = rs.getInput(info.side)
-	point.priority = priority.NORM
-	point.value = point.state
-	point.changed = false
+	point.name = info.name
+	point.input = function() end
+	point.output = function() end
+	point.subpoints = {}
+
+	local details = peripheral.call(point.side, "getTargetDetails", point.target)
+
+	for name, key in pairs(subpoints) do
+		local subpoint = {}
+		subpoint.name = name
+		subpoint.super = point.name
+		subpoint.side = info.sensor
+		subpoint.target = info.target
+		subpoint.key = key
+		subpoint.state = details and details[key]
+		subpoint.value = subpoint.state
+		subpoint.priority = priority.NORM
+		subpoint.changed = false
+		subpoint.input = function()
+			local details = peripiheral.call(point.side, "getTargetDetails", point.target)
+			if details then
+				return details[subpoint.key]
+			end
+		end
+		subpoint.output = function() end
+		table.insert(point.subpoints, setmetatable(subpoint, pmeta))
+	end
+
 	setmetatable(point, pmeta)
-	return point
-end
-
-function capacity(sensorInfo, pointInfo)
-	local point = new(sensorInfo, pointInfo)
-	point.key = "Capacity"
-	return point
-end
-
-function amount(sensorInfo, pointInfo)
-	local point = new(sensorInfo, pointInfo)
-	point.key = "Stored"
-	return point
-end
-
-function output(sensorInfo, pointInfo)
-	local point = new(sensorInfo, pointInfo)
-	point.key = "Output"
 	return point
 end

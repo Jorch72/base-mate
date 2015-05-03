@@ -1,21 +1,22 @@
 local Point = {
 	tick = function(self)
+		local startValue = self.value
 		if self.state ~= self.value then
-			self:onChange()
+			self.output()
 		end
-	end,
-	onChange = function(self)
-		if self.priority == priority.NORM and self.value ~= self.state then
+		local input = self.input()
+		if input then self.state = input end
+		if self.state ~= self.value and self.priority == priority.NORM then
+			self.value = self.state
+		end
+		if self.value ~= startValue then
 			self.changed = true
-			self.state = self.value
-			--send update upward
 		end
 	end,
 	onCommand = function(self, command)
 		if command.priority >= self.priority then
-			self.state = command.value
+			self.value = command.value
 			self.priority = command.priority
-			self:onChange()
 			return true
 		else
 			return false
@@ -42,6 +43,8 @@ function new(info)
 	point.priority = priority.NORM
 	point.value = point.state
 	point.changed = false
+	point.input = function() end
+	point.output = function() end
 	setmetatable(point, pmeta)
 	return point
 end

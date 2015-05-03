@@ -13,28 +13,23 @@ local sideLookup = {
 
 local Point = {
 	tick = function(self)
-		if self.value ~= self.state then
-			if self.state ~= 0 then
-				turtle.select(self.state)
-				sideLookup.suck[self.side]()
-			end
-			if self.value ~= 0 then
-				turtle.select(self.value)
-				sideLookup.drop[self.side]()
-			end
-			self:onChange()
+		local startValue = self.value
+		if self.state ~= self.value then
+			self.output()
 		end
-	end,
-	onChange = function(self)
-		self.changed = true
-		self.state = self.value
-		--send update upward
+		local input = self.input()
+		if input then self.state = input end
+		if self.state ~= self.value and self.priority == priority.NORM then
+			self.value = self.state
+		end
+		if self.value ~= startValue then
+			self.changed = true
+		end
 	end,
 	onCommand = function(self, command)
 		if command.priority >= self.priority then
-			self.state = command.value
+			self.value = command.value
 			self.priority = command.priority
-			self:onChange()
 			return true
 		else
 			return false
@@ -69,6 +64,26 @@ function new(info)
 	point.priority = priority.NORM
 	point.value = point.state
 	point.changed = false
+	point.output = function()
+		if point.state ~= 0 then
+			turtle.select(point.state)
+			sideLookup.suck[point.side]()
+		end
+		if point.value ~= 0 then
+			turtle.select(point.value)
+			sideLookup.drop[point.side]()
+		end
+	end
+	point.input = function()
+		local selected = 0
+		for _, slot in ipairs(point.slots) do
+			if turtle.getItemCount(slot) == 0 then
+				selected = slot
+				break
+			end
+		end
+		return selected
+	end
 	setmetatable(point, pmeta)
 	return point
 end

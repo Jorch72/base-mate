@@ -1,0 +1,122 @@
+local Point = {
+	tick = function(self)
+		local startValue = self.value
+		if self.state ~= self.value then
+			self.output()
+		end
+		local input = self.input()
+		if input then self.state = input end
+		if self.state ~= self.value and self.priority == priority.NORM then
+			self.value = self.state
+		end
+		if self.value ~= startValue then
+			self.changed = true
+		end
+	end,
+	onCommand = function(self, command)
+		if command.priority >= self.priority then
+			self.value = command.value
+			self.priority = command.priority
+			return true
+		else
+			return false
+		end
+	end,
+	setValue = function(self, value)
+		self.value = value
+	end,
+	restoreState = function(self, state)
+		self.value = state[1]
+		self.priority = state[2]
+	end,
+	saveState = function(self)
+		return {self.value, self.priority}
+	end,
+}
+
+local pmeta = {__index = Point}
+
+local subpoints = {
+	connected = "getConnected",
+	numberOfRods = "getNumberOfControlRods",
+	energyStored = "getEnergyStored",
+	fuelTemperature = "getFuelTemperature",
+	caseTemperature = "getCasingTemperature",
+	fuelAmount = "getFuelAmount",
+	wasteAmount = "getWasteAmount",
+	fuelMax = "getFuelAmountMax",
+	energyProduced = "getEnergyProducedLastTick",
+	hotFluidProduced = "getHotFluidProducedLastTick",
+	coolantType = "getCoolantType",
+	coolantAmount = "getCoolantAmount",
+	coolantMax = "getCoolantAmountMax",
+	hotFluidType = "getHotFluidType",
+	hotFluidAmount = "getHotFluidAmount",
+	hotFluidMax = "getHotFluidAmountMax",
+	fuelReactivity = "getFuelReactivity",
+	fuelConsumed = "getFuelConsumedLastTick",
+	activeCooling = "isActivelyCooled",
+}
+
+function new(info)
+	local point = {}
+	point.name = info.name
+	point.input = function() end
+	point.output = function() end
+	point.subpoints = {}
+
+	for name, method in pairs(subpoints) do
+		local subpoint = {}
+		subpoint.name = name
+		subpoint.super = point.name
+		subpoint.side = info.side
+		subpoint.method = method
+		subpoint.state = peripheral.call(point.side, subpoint.method)
+		subpoint.value = subpoint.state
+		subpoint.priority = priority.NORM
+		subpoint.changed = false
+		subpoint.input = function() return peripiheral.call(subpoint.side, subpoint.method) end
+		subpoint.output = function() end
+		table.insert(point.subpoints, setmetatable(subpoint, pmeta))
+	end
+
+	do
+		--active
+		local subpoint = {}
+		subpoint.name = "active"
+		subpoint.super = point.name
+		subpoint.side = info.side
+		subpoint.input = function() return peripheral.call(subpoint.side, "isActive") end
+		subpoint.output = function() return peripheral.call(subpoint.side, "setActive", subpoint.value) end
+		subpoint.state = subpoint.input()
+		subpoint.value = subpoint.state
+		subpoint.priority = priority.NORM
+		subpoint.changed = false
+		table.insert(point.subpoints, setmetatable(subpoint, pmeta))
+	end
+
+	do
+		--control rod level
+		local subpoint = {}
+		subpoint.name = "controlRodLevel"
+		subpoint.super = point.name
+		subpoint.side = info.side
+		subpoint.input = function()
+			local rodCount = peripheral.call(subpoint.side, "getNumberOfControlRods")
+			local total = 0
+			for i = 0, rodCount - 1 do
+				total = total + peripheral.call(subpoint.side, "getControlRodLevel", i)
+			end
+			return total / rodCount
+		end
+		subpoint.output = function() return peripheral.call(subpoint.side, "setAllControlRodLevels", subpoint.value) end
+		subpoint.state = subpoint.input()
+		subpoint.value = subpoint.state
+		subpoint.priority = priority.NORM
+		subpoint.changed = false
+		table.insert(point.subpoints, setmetatable(subpoint, pmeta))
+	end
+
+	setmetatable(point, pmeta)
+	return point
+end

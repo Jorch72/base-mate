@@ -5,7 +5,7 @@ local Point = {
 			self.output()
 		end
 		local input = self.input()
-		if input then self.state = input end
+		if input ~= nil then self.state = input end
 		if self.state ~= self.value and self.priority == priority.NORM then
 			self.value = self.state
 		end

@@ -25,21 +25,21 @@ function new(info)
 	p.subpoints = {}
 
 	for name, method in pairs(subpoints) do
-		local subpoint = point.new({name = name, state = peripheral.call(p.side, method)})
+		local subpoint = point.new({name = name, state = peripheral.call(info.side, method)})
 		subpoint.super = p.name
 		subpoint.side = info.side
 		subpoint.method = method
-		subpoint.input = function() return peripiheral.call(subpoint.side, subpoint.method) end
+		subpoint.input = function() return peripheral.call(subpoint.side, subpoint.method) end
 		subpoint.output = function() end
 		table.insert(p.subpoints, subpoint)
 	end
 
 	do
 		--active
-		local subpoint = point.new({name = "active", state = peripheral.call(p.side, "isActive")})
+		local subpoint = point.new({name = "active", state = peripheral.call(info.side, "getActive")})
 		subpoint.super = p.name
 		subpoint.side = info.side
-		subpoint.input = function() return peripheral.call(subpoint.side, "isActive") end
+		subpoint.input = function() return peripheral.call(subpoint.side, "getActive") end
 		subpoint.output = function() return peripheral.call(subpoint.side, "setActive", subpoint.value) end
 		table.insert(p.subpoints, subpoint)
 	end

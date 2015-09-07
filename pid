@@ -1,0 +1,53 @@
+local PID = {
+	tick = function(self, input)
+		local current = input or (self.input and self.input())
+		if not current then return false end
+
+		local err = self.setpoint - current
+		local intOld = self.int
+		self.int = self.int + err
+		local Iterm = self.Ki * self.int * self.tickRate
+		if Iterm < self.iMin or Iterm > self.iMax then
+			--error out of range, constrain it to help prevent extreme overshoot
+			self.int = intOld
+			Iterm = self.Ki * self.int * self.tickRate
+		end
+
+		der = (err - self.lasterr) / self.tickRate
+		self.lasterr = err
+
+		local out = self.Kp * err + Iterm + self.Kd * der
+		out = math.min(math.max(output, 0), 2000)
+		if self.output then return self.output(out) else return out end
+	end,
+	run = function(self)
+		local tick = os.startTimer(0)
+		while true do
+			local event = {os.pullEvent()}
+			if event[1] == "timer" and event[2] == tick then
+				self:tick()
+				tick = os.startTimer(self.tickRate)
+			end
+		end
+	end,
+}
+
+local pmeta = {__index = PID}
+
+function new(input, output, setpoint, p, i, d, tickRate)
+	local pid = {
+		input = input,
+		output = output,
+		setpoint = setpoint,
+		Kp = p,
+		Ki = i,
+		Kd = d,
+		tickRate = tickRate,
+		iMin = -math.huge,
+		iMax = math.huge,
+	}
+
+	setmetatable(pid, pmeta)
+
+	return pid
+end

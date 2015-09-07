@@ -15,13 +15,28 @@ local function send(id, message)
 	end
 end
 
+local function packPoints(panel)
+	local pointList = {}
+	for name, info in pairs(points) do
+		if info.panel ~= panel then
+			local p = {
+				name = name,
+				value = info.value,
+				priority = info.priority,
+			}
+			table.insert(pointList, p)
+		end
+	end
+	return pointList
+end
+
 while true do
 	local event = {os.pullEvent()}
 	if event[1] == "rednet_message" then
 		if type(event[3]) == "string" then
 			if event[3] == "connect_panel" then
 				panels[event[2]] = {status = "open"}
-				send(event[2], "ok")
+				send(event[2], {type = "point_list", points = packPoints(event[2])})
 				send(event[2], {type = "q_point_list"})
 			end
 		elseif type(event[3]) == "table" then

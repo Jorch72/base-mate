@@ -9,16 +9,16 @@ function new(info)
 	local p = point.new(info)
 	p.subpoints = {}
 
-	local details = peripheral.call(p.side, "getTargetDetails", p.target)
+	local details = peripheral.call(info.side, "getTargetDetails", info.target)
 
 	for name, key in pairs(subpoints) do
 		local subpoint = point.new({name = name, state = details and details[key]})
 		subpoint.super = p.name
-		subpoint.side = info.sensor
+		subpoint.side = info.side
 		subpoint.target = info.target
 		subpoint.key = key
 		subpoint.input = function()
-			local details = peripiheral.call(subpoint.side, "getTargetDetails", subpoint.target)
+			local details = peripheral.call(subpoint.side, "getTargetDetails", subpoint.target)
 			if details then
 				return details[subpoint.key]
 			end
